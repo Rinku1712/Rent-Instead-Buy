@@ -13,12 +13,13 @@ const signup = async (req, res) => {
 const login = async (req, res) => {
   try {
     const user = await authServices.login(req.body);
-    if (!user) {
-      res.status(400).json({ message: 'User Is not Exist' });
-    }
-    res.status(201).json({ message: 'User Login Successfully', user });
+    res.status(200).json({ message: 'User Login Successfully', user });
   } catch (error) {
-    res.status(500).json({ error: error.message, message: 'Error Found in Login' });
+    // Keep validation and authentication failures from being reported as server errors.
+    res.status(error.statusCode || 500).json({
+      error: error.message,
+      message: 'Error Found in Login',
+    });
   }
 };
 module.exports = { signup, login };
