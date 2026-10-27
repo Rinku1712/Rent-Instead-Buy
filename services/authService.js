@@ -2,9 +2,7 @@ const User = require('../models/userModel');
 const bcrypt = require('bcrypt');
 const generateToken = require('../utils/generateToken');
 
-const { signupSchema } = require('../validation/authValidation');
-
-const signup = async () => {
+const signup = async (value) => {
   const existingUser = await User.findOne({ email: value.email });
 
   if (existingUser) {
@@ -12,7 +10,7 @@ const signup = async () => {
   }
   const passwordHash = await bcrypt.hash(value.password, 10);
 
-  const newUser = await signupSchema.create({
+  const newUser = await User.create({
     name: value.name,
     email: value.email,
     passwordHash,
