@@ -39,7 +39,7 @@ const createCategory = async (categoryData) => {
     slug,
     description,
     image,
-    parentCategory: parentCategory || null,
+    parentCategory: parentCategory,
   });
 
   return {
@@ -49,8 +49,55 @@ const createCategory = async (categoryData) => {
     data: category,
   };
 };
-
+const deleteCategory = async (categoryId) => {
+  const category = await Category.findOneAndUpdate(
+    {
+      _id: categoryId,
+      isDeleted: false,
+    },
+    {
+      $set: {
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+    },
+    {
+      new: true,
+    },
+  );
+  if (!category) {
+    return {
+      success: false,
+      statusCode: 404,
+      message: 'Category not found',
+    };
+  }
+  return {
+    success: true,
+    statusCode: 200,
+    message: 'Category soft deleted successfully',
+  };
+};
+const updateCategory = async (categoryId, updateData) => {
+  const category = await Category.findOneAndUpdate({ _id: categoryId }, updateData, {
+    new: true,
+    runValidators: true,
+  });
+  if (!category) {
+    return {
+      success: false,
+      status: 404,
+      message: 'Category Not Found',
+    };
+  }
+};
+return {
+  success: true,
+  statusCode: 200,
+};
 module.exports = {
   getAllCategories,
   createCategory,
+  deleteCategory,
+  updateCategory,
 };

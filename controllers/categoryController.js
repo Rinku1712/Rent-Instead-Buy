@@ -47,8 +47,33 @@ const createCategory = async (req, res) => {
     });
   }
 };
+const deleteCategory = async (req, res) => {
+  try {
+    const category = await categoryService.deleteCategory(req.params.id);
+    res.status(201).json({
+      success: true,
+      message: 'Category Is Soft Deleted',
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error.message,
+      message: 'Error Found in Soft Delete',
+    });
+  }
+};
 
+const updateCategory = async (req, res) => {
+  try {
+    const category = await categoryService.updateCategory(req.params.id, req.body);
+    console.log(category);
+    res.status(200).json({ message: 'Category Successfully Updated', category });
+  } catch (error) {
+    res.status(500).json({ message: 'Error Founded In UpdateCategory', error: error.message });
+  }
+};
 module.exports = {
   getAllCategories,
   createCategory,
+  deleteCategory,
+  updateCategory,
 };

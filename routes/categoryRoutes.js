@@ -9,5 +9,7 @@ router.get('/', categoryController.getAllCategories);
 
 // Only Super Admin can create categories.
 router.post('/', adminauthmiddleware, categoryController.createCategory);
+router.delete('/:id', adminauthmiddleware, categoryController.deleteCategory);
+router.put('/:id', adminauthmiddleware, categoryController.updateCategory);
 
 module.exports = router;

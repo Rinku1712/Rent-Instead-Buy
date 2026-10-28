@@ -19,7 +19,6 @@ function adminauthmiddleware(req, res, next) {
         message: 'Super Admin access denied',
       });
     }
-
     req.isSuperAdmin = true;
     return next();
   } catch (error) {
