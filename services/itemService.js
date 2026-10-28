@@ -21,8 +21,7 @@ async function createItem(userId, itemData) {
       isActive: true,
       isDeleted: false,
     });
-    console.log('Received categoryId:', categoryId);
-    console.log('Found category:', category);
+
     if (!category) {
       return {
         success: false,
@@ -32,6 +31,7 @@ async function createItem(userId, itemData) {
     }
 
     const item = await Item.create({
+      // The controller supplies the authenticated owner ID separately from request data.
       ownerId: userId,
       categoryId,
       name,

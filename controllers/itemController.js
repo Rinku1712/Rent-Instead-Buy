@@ -3,8 +3,9 @@ const itemService = require('../services/itemService');
 
 const createItem = async (req, res) => {
   try {
-    const result = await itemService.createItem(req.params.id, req.body);
-    console.log('Create item result:', result);
+    // Use the authenticated user's ID; this route does not have an :id parameter.
+    const result = await itemService.createItem(req.user._id, req.body);
+
     return res.status(result.statusCode).json({
       success: result.success,
       message: result.message,
