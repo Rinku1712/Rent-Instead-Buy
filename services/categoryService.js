@@ -1,13 +1,13 @@
 const Category = require('../models/categoryModel');
 
-async function getAllCategories() {
+const getAllCategories = async () => {
   const categories = await Category.find({
     isActive: true,
     isDeleted: false,
   }).sort({ name: 1 });
 
   return categories;
-}
+};
 
 const createCategory = async (categoryData) => {
   const { name, description, image, parentCategory } = categoryData;
@@ -90,10 +90,10 @@ const updateCategory = async (categoryId, updateData) => {
       message: 'Category Not Found',
     };
   }
-};
-return {
-  success: true,
-  statusCode: 200,
+  return {
+    success: true,
+    statusCode: 200,
+  };
 };
 module.exports = {
   getAllCategories,

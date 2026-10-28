@@ -27,7 +27,7 @@ const signup = async (value) => {
   };
 };
 
-const login = async () => {
+const login = async (value) => {
   const user = await User.findOne({
     email: value.email,
   }).select('+passwordHash');
