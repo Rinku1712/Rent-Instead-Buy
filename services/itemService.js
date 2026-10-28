@@ -45,7 +45,13 @@ async function createItem(userId, itemData) {
       location,
       availabilityStatus: 'available',
     });
-
+    // if (itemData) {
+    //   return {
+    //     success: false,
+    //     statusCode: 409,
+    //     message: 'Item Already Exist',
+    //   };
+    // }
     return {
       success: true,
       statusCode: 201,
