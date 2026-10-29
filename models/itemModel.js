@@ -84,13 +84,6 @@ const itemSchema = new mongoose.Schema(
       type: itemLocationSchema,
       required: true,
     },
-
-    approvalStatus: {
-      type: String,
-      enum: ['pending', 'approved', 'rejected'],
-      default: 'pending',
-    },
-
     availabilityStatus: {
       type: String,
       enum: ['available', 'paused'],

@@ -21,7 +21,6 @@ const createItem = async (req, res) => {
 const getAllItems = async (req, res) => {
   try {
     const result = await itemService.getAllItems();
-
     return res.status(200).json({ message: 'Here Is Your All Items', result });
   } catch (error) {
     return res.status(500).json({ message: 'Error Founded in GetAllItem' });
