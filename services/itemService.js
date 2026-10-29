@@ -1,7 +1,7 @@
 const Item = require('../models/itemModel');
 const Category = require('../models/categoryModel');
 
-async function createItem(userId, itemData) {
+const createItem = async (userId, itemData) => {
   try {
     const {
       categoryId,
@@ -51,7 +51,7 @@ async function createItem(userId, itemData) {
     //     statusCode: 409,
     //     message: 'Item Already Exist',
     //   };
-    // }
+    // }`
     return {
       success: true,
       statusCode: 201,
@@ -73,6 +73,98 @@ async function createItem(userId, itemData) {
       message: 'Failed to create item',
     };
   }
-}
+};
+const getAllItems = async () => {
+  const item = await Item.find({
+    availabilityStatus: 'available',
+    isDeleted: false,
+  })
+    .populate('categoryId', 'name slug')
+    .populate('ownerId', 'name')
+    .sort({ createdAt: -1 });
+  return {
+    success: true,
+    statusCode: 200,
+    message: 'Items fetched successfully',
+    item,
+  };
+};
+const searchItems = async (filters) => {
+  const { search, categoryId, category, brand, city, condition, minPrice, maxPrice } = filters;
+  const query = {
+    availabilityStatus: 'available',
+    isDeleted: false,
+  };
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: 'i' } },
+      { brand: { $regex: search, $options: 'i' } },
+      { description: { $regex: search, $options: 'i' } },
+    ];
+  }
+  if (category) {
+    const foundCategory = await Category.findOne({
+      name: { $regex: `^${category}$`, $options: 'i' },
+      isActive: true,
+      isDeleted: false,
+    });
+    if (!foundCategory) {
+      return {
+        success: true,
+        statusCode: 200,
+        message: 'Search completed successfully',
+        items: [],
+      };
+    }
 
-module.exports = { createItem };
+    query.categoryId = foundCategory._id;
+  }
+  if (categoryId) {
+    query.categoryId = categoryId;
+  }
+
+  if (brand) {
+    query.brand = { $regex: brand, $options: 'i' };
+  }
+
+  if (city) {
+    query['location.city'] = { $regex: city, $options: 'i' };
+  }
+  if (condition) {
+    query.condition = condition;
+  }
+
+  if (minPrice !== undefined || maxPrice !== undefined) {
+    query.pricePerDay = {};
+
+    if (minPrice !== undefined) {
+      query.pricePerDay.$gte = Number(minPrice);
+    }
+
+    if (maxPrice !== undefined) {
+      query.pricePerDay.$lte = Number(maxPrice);
+    }
+  }
+
+  const items = await Item.find(query)
+    .populate('categoryId', 'name slug')
+    .populate('ownerId', 'name')
+    .sort({ createdAt: -1 });
+
+  // if (items.city != filters.city) {
+  //   return {
+  //     success: false, this very bad approach
+  //     statusCode: 404,
+  //     message: 'Items not found',
+  //     items: [],
+  //   };
+  // }
+
+  return {
+    success: true,
+    statusCode: 200,
+    message: 'Search completed successfully',
+    items,
+  };
+};
+module.exports = { createItem, getAllItems, searchItems };
