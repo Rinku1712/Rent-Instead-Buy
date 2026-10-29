@@ -1,5 +1,8 @@
 const Item = require('../models/itemModel');
 const Category = require('../models/categoryModel');
+const mongoose = require('mongoose');
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const createItem = async (userId, itemData) => {
   try {
@@ -8,6 +11,7 @@ const createItem = async (userId, itemData) => {
       name,
       description,
       brand,
+      state,
       images,
       condition,
       pricePerDay,
@@ -38,6 +42,7 @@ const createItem = async (userId, itemData) => {
       description,
       brand,
       images,
+      state,
       condition,
       pricePerDay,
       pricePerWeek,
@@ -91,31 +96,100 @@ const getAllItems = async () => {
 };
 
 const searchItems = async (filters) => {
-  const { search, item, categoryId, category, brand, city, condition, minPrice, maxPrice } =
-    filters;
+  const {
+    search,
+    item,
+    categoryId,
+    category,
+    brand,
+    city,
+    state,
+    condition,
+    minPrice,
+    maxPrice,
+  } = filters;
 
-  // CHANGE 1: Support both "item" and "search" query parameters.
-  // "item" is specifically for searching by product name.
-  const itemName = typeof item === 'string' ? item.trim() : '';
-  const searchText = typeof search === 'string' ? search.trim() : '';
+  const textFilters = { search, item, category, brand, city, condition, state, categoryId };
+  for (const [name, value] of Object.entries(textFilters)) {
+    if (value !== undefined && typeof value !== 'string') {
+      return {
+        success: false,
+        statusCode: 400,
+        message: `Invalid ${name} filter.`,
+        items: [],
+      };
+    }
+  }
+
+  const itemName = item?.trim() || '';
+  const searchText = search?.trim() || '';
+  const categoryName = category?.trim() || '';
+  const brandName = brand?.trim() || '';
+  const cityName = city?.trim() || '';
+  const stateName = state?.trim() || '';
+  const itemCondition = condition?.trim() || '';
+  const categoryObjectId = categoryId?.trim() || '';
+
+  const parsePrice = (name, value) => {
+    if (value === undefined) {
+      return { value: undefined };
+    }
+
+    if (typeof value !== 'string') {
+      return { error: name };
+    }
+
+    const parsed = Number(value);
+    if (value.trim() === '' || !Number.isFinite(parsed) || parsed < 0) {
+      return { error: name };
+    }
+
+    return { value: parsed };
+  };
+
+  const parsedMinPrice = parsePrice('minPrice', minPrice);
+  const parsedMaxPrice = parsePrice('maxPrice', maxPrice);
+  if (parsedMinPrice.error || parsedMaxPrice.error) {
+    const invalidFilter = parsedMinPrice.error || parsedMaxPrice.error;
+    return {
+      success: false,
+      statusCode: 400,
+      message: `Invalid ${invalidFilter} filter.`,
+      items: [],
+    };
+  }
+
+  if (
+    (categoryObjectId && !mongoose.Types.ObjectId.isValid(categoryObjectId)) ||
+    (itemCondition && !['new', 'like_new', 'good', 'fair'].includes(itemCondition)) ||
+    (parsedMinPrice.value !== undefined &&
+      parsedMaxPrice.value !== undefined &&
+      parsedMinPrice.value > parsedMaxPrice.value)
+  ) {
+    return {
+      success: false,
+      statusCode: 400,
+      message: 'One or more search filters are invalid.',
+      items: [],
+    };
+  }
 
   const query = {
     availabilityStatus: 'available',
     isDeleted: false,
   };
 
-  // CHANGE 2: Allow city-only and category-only searches.
-  // Return an error only when no useful filter is supplied.
   if (
     !itemName &&
     !searchText &&
-    !category &&
-    !categoryId &&
-    !brand &&
-    !city &&
-    !condition &&
-    minPrice === undefined &&
-    maxPrice === undefined
+    !categoryName &&
+    !categoryObjectId &&
+    !brandName &&
+    !cityName &&
+    !stateName &&
+    !itemCondition &&
+    parsedMinPrice.value === undefined &&
+    parsedMaxPrice.value === undefined
   ) {
     return {
       success: false,
@@ -125,10 +199,9 @@ const searchItems = async (filters) => {
     };
   }
 
-  // STEP 1: Find the category if the user supplied its name.
-  if (category) {
+  if (categoryName) {
     const foundCategory = await Category.findOne({
-      name: { $regex: `^${category.trim()}$`, $options: 'i' },
+      name: { $regex: `^${escapeRegex(categoryName)}$`, $options: 'i' },
       isActive: true,
       isDeleted: false,
     });
@@ -146,56 +219,53 @@ const searchItems = async (filters) => {
     query.categoryId = foundCategory._id;
   }
 
-  if (categoryId) {
-    query.categoryId = categoryId;
+  if (categoryObjectId) {
+    query.categoryId = categoryObjectId;
   }
 
-  // CHANGE 3: If "item" is provided, match the product name.
-  // This prevents a different product in the same category
-  // from matching just because its description contains "Plain".
   if (itemName) {
-    query.name = { $regex: itemName, $options: 'i' };
+    query.name = { $regex: escapeRegex(itemName), $options: 'i' };
   } else if (searchText) {
-    // General search can match name, brand or description.
     query.$or = [
-      { name: { $regex: searchText, $options: 'i' } },
-      { brand: { $regex: searchText, $options: 'i' } },
-      { description: { $regex: searchText, $options: 'i' } },
+      { name: { $regex: escapeRegex(searchText), $options: 'i' } },
+      { brand: { $regex: escapeRegex(searchText), $options: 'i' } },
+      { description: { $regex: escapeRegex(searchText), $options: 'i' } },
     ];
   }
 
-  if (brand) {
-    query.brand = { $regex: brand.trim(), $options: 'i' };
+  if (brandName) {
+    query.brand = { $regex: escapeRegex(brandName), $options: 'i' };
   }
 
-  if (condition) {
-    query.condition = condition;
+  if (itemCondition) {
+    query.condition = itemCondition;
   }
 
-  if (minPrice !== undefined || maxPrice !== undefined) {
+  if (parsedMinPrice.value !== undefined || parsedMaxPrice.value !== undefined) {
     query.pricePerDay = {};
 
-    if (minPrice !== undefined) {
-      query.pricePerDay.$gte = Number(minPrice);
+    if (parsedMinPrice.value !== undefined) {
+      query.pricePerDay.$gte = parsedMinPrice.value;
     }
 
-    if (maxPrice !== undefined) {
-      query.pricePerDay.$lte = Number(maxPrice);
+    if (parsedMaxPrice.value !== undefined) {
+      query.pricePerDay.$lte = parsedMaxPrice.value;
     }
   }
 
-  // STEP 2: Search in the requested city, if one was provided.
-  if (city) {
+  if (cityName) {
     query['location.city'] = {
-      $regex: `^${city.trim()}$`,
+      $regex: `^${escapeRegex(cityName)}$`,
       $options: 'i',
     };
   }
 
-  console.log('Product name received:', itemName);
-  console.log('General search received:', searchText);
-  console.log('City received:', city);
-  console.log('MongoDB query:', JSON.stringify(query, null, 2));
+  if (stateName) {
+    query['location.state'] = {
+      $regex: `^${escapeRegex(stateName)}$`,
+      $options: 'i',
+    };
+  }
 
   const items = await Item.find(query)
     .populate('categoryId', 'name slug')
@@ -208,7 +278,7 @@ const searchItems = async (filters) => {
       success: true,
       statusCode: 200,
       message: 'Matching items found.',
-      requestedCity: city || null,
+      requestedCity: cityName || null,
       alternativeItemsAvailable: false,
       alternativeCities: [],
       items,
@@ -217,11 +287,9 @@ const searchItems = async (filters) => {
 
   // STEP 4: If no results were found in this city,
   // search other cities using the same product/category/price filters.
-  if (city) {
+  if (cityName) {
     const alternativeQuery = { ...query };
 
-    // CHANGE 4: Remove ONLY the city condition.
-    // Keep the product name, category, brand and other filters.
     delete alternativeQuery['location.city'];
 
     const alternativeItems = await Item.find(alternativeQuery)
@@ -230,7 +298,6 @@ const searchItems = async (filters) => {
       .sort({ createdAt: -1 });
 
     if (alternativeItems.length > 0) {
-      // Collect unique city names without repeating them.
       const alternativeCities = [
         ...new Map(
           alternativeItems
@@ -242,8 +309,8 @@ const searchItems = async (filters) => {
       return {
         success: true,
         statusCode: 200,
-        message: `This item is not available in ${city}, but matching items are available in other cities.`,
-        requestedCity: city,
+        message: `This item is not available in ${cityName}, but matching items are available in other cities.`,
+        requestedCity: cityName,
         alternativeItemsAvailable: true,
         alternativeCities,
         items: alternativeItems,
@@ -251,13 +318,11 @@ const searchItems = async (filters) => {
     }
   }
 
-  // STEP 5: No matching item was found in the requested city
-  // or any other city.
   return {
     success: false,
     statusCode: 404,
     message: 'Item is not available.',
-    requestedCity: city || null,
+    requestedCity: cityName || null,
     alternativeItemsAvailable: false,
     alternativeCities: [],
     items: [],

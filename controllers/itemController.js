@@ -30,10 +30,8 @@ const getAllItems = async (req, res) => {
 const searchItems = async (req, res) => {
   try {
     const result = await itemService.searchItems(req.query);
-    return res.status(200).json({
-      success: result.message,
-      items: result.items,
-    });
+    const { statusCode, ...response } = result;
+    return res.status(statusCode).json(response);
   } catch (error) {
     return res.status(500).json({ message: 'Error founded in Searching Items' });
   }
