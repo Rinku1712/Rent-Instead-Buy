@@ -91,18 +91,28 @@ const getAllItems = async () => {
 };
 
 const searchItems = async (filters) => {
-  const { search, categoryId, category, brand, city, condition, minPrice, maxPrice } = filters;
+  const { search, item, categoryId, category, brand, city, condition, minPrice, maxPrice } =
+    filters;
 
-  // CHANGE: Trim search text so empty spaces are not treated as a valid search.
+  // CHANGE 1: Support both "item" and "search" query parameters.
+  // "item" is specifically for searching by product name.
+  const itemName = typeof item === 'string' ? item.trim() : '';
   const searchText = typeof search === 'string' ? search.trim() : '';
 
-  // CHANGE: Do not search all items accidentally when no product/category
-  // filter has been provided.
+  const query = {
+    availabilityStatus: 'available',
+    isDeleted: false,
+  };
+
+  // CHANGE 2: Allow city-only and category-only searches.
+  // Return an error only when no useful filter is supplied.
   if (
+    !itemName &&
     !searchText &&
     !category &&
     !categoryId &&
     !brand &&
+    !city &&
     !condition &&
     minPrice === undefined &&
     maxPrice === undefined
@@ -115,13 +125,7 @@ const searchItems = async (filters) => {
     };
   }
 
-  const query = {
-    availabilityStatus: 'available',
-    isDeleted: false,
-  };
-
-  // STEP 1: Find the selected category first.
-  // If the category does not exist, stop the search.
+  // STEP 1: Find the category if the user supplied its name.
   if (category) {
     const foundCategory = await Category.findOne({
       name: { $regex: `^${category.trim()}$`, $options: 'i' },
@@ -139,7 +143,6 @@ const searchItems = async (filters) => {
       };
     }
 
-    // Only search items belonging to this category.
     query.categoryId = foundCategory._id;
   }
 
@@ -147,10 +150,13 @@ const searchItems = async (filters) => {
     query.categoryId = categoryId;
   }
 
-  // STEP 2: Search for the product by name, brand or description.
-  // CHANGE: The search filter remains in the query during alternative search,
-  // so an unrelated item like RCAR cannot match a search for Laptop.
-  if (searchText) {
+  // CHANGE 3: If "item" is provided, match the product name.
+  // This prevents a different product in the same category
+  // from matching just because its description contains "Plain".
+  if (itemName) {
+    query.name = { $regex: itemName, $options: 'i' };
+  } else if (searchText) {
+    // General search can match name, brand or description.
     query.$or = [
       { name: { $regex: searchText, $options: 'i' } },
       { brand: { $regex: searchText, $options: 'i' } },
@@ -178,7 +184,7 @@ const searchItems = async (filters) => {
     }
   }
 
-  // STEP 3: Search in the requested city first.
+  // STEP 2: Search in the requested city, if one was provided.
   if (city) {
     query['location.city'] = {
       $regex: `^${city.trim()}$`,
@@ -186,7 +192,8 @@ const searchItems = async (filters) => {
     };
   }
 
-  console.log('Search received:', searchText);
+  console.log('Product name received:', itemName);
+  console.log('General search received:', searchText);
   console.log('City received:', city);
   console.log('MongoDB query:', JSON.stringify(query, null, 2));
 
@@ -195,13 +202,12 @@ const searchItems = async (filters) => {
     .populate('ownerId', 'name')
     .sort({ createdAt: -1 });
 
-  // STEP 4: If matching items are found in the requested city,
-  // return them immediately.
+  // STEP 3: If results are found in the requested city, return them.
   if (items.length > 0) {
     return {
       success: true,
       statusCode: 200,
-      message: 'Search completed successfully.',
+      message: 'Matching items found.',
       requestedCity: city || null,
       alternativeItemsAvailable: false,
       alternativeCities: [],
@@ -209,14 +215,13 @@ const searchItems = async (filters) => {
     };
   }
 
-  // STEP 5: If the requested city has no matching items,
-  // search other cities using the SAME product/category/price filters.
+  // STEP 4: If no results were found in this city,
+  // search other cities using the same product/category/price filters.
   if (city) {
     const alternativeQuery = { ...query };
 
-    // IMPORTANT: Remove only the city filter.
-    // Do not remove query.$or or the other filters.
-    // This is what prevents an unknown product from returning RCAR.
+    // CHANGE 4: Remove ONLY the city condition.
+    // Keep the product name, category, brand and other filters.
     delete alternativeQuery['location.city'];
 
     const alternativeItems = await Item.find(alternativeQuery)
@@ -224,19 +229,20 @@ const searchItems = async (filters) => {
       .populate('ownerId', 'name')
       .sort({ createdAt: -1 });
 
-    // STEP 6: If matching items exist in other cities, return them.
     if (alternativeItems.length > 0) {
-      // CHANGE: Collect unique alternative city names for better UX.
+      // Collect unique city names without repeating them.
       const alternativeCities = [
         ...new Map(
-          alternativeItems.map((item) => [item.location.city.toLowerCase(), item.location.city]),
+          alternativeItems
+            .filter((item) => item.location && item.location.city)
+            .map((item) => [item.location.city.toLowerCase(), item.location.city]),
         ).values(),
       ];
 
       return {
         success: true,
         statusCode: 200,
-        message: `No matching items found in ${city}. Items are available in other cities.`,
+        message: `This item is not available in ${city}, but matching items are available in other cities.`,
         requestedCity: city,
         alternativeItemsAvailable: true,
         alternativeCities,
@@ -245,10 +251,8 @@ const searchItems = async (filters) => {
     }
   }
 
-  // CHANGE: This final return runs only when neither the requested-city
-  // search nor the alternative-city search finds a matching item.
-  // This fixes the "unknown product returns RCAR" problem,
-  // provided the product search parameter reaches this service correctly.
+  // STEP 5: No matching item was found in the requested city
+  // or any other city.
   return {
     success: false,
     statusCode: 404,
