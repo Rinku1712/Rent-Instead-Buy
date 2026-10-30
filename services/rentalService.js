@@ -3,12 +3,12 @@ const Item = require('../models/itemModel');
 const Rental = require('../models/rentalModel');
 
 // Create rental request
+
 const createRental = async (rentalData, renterId) => {
   const { itemId, startDate, endDate } = rentalData;
 
   // 1. Check required fields
   if (!itemId || !startDate || !endDate) {
-    //This checks whether the user has provided all three required fields.
     return {
       success: false,
       statusCode: 400,
@@ -57,12 +57,12 @@ const createRental = async (rentalData, renterId) => {
     };
   }
 
+  // 6. Convert dates
   const start = new Date(startDate);
   const end = new Date(endDate);
 
+  // 7. Check valid dates
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-    //This checks whether the dates are valid // IsNAN is built in function who checks the date is valid or not
-    //getTime() it converts dates into milliseconds
     return {
       success: false,
       statusCode: 400,
@@ -80,7 +80,7 @@ const createRental = async (rentalData, renterId) => {
 
   // 8. Check past date
   const today = new Date();
-  today.setUTCHours(0, 0, 0, 0); // Date Normalization
+  today.setUTCHours(0, 0, 0, 0);
 
   if (start < today) {
     return {
@@ -106,22 +106,23 @@ const createRental = async (rentalData, renterId) => {
     };
   }
 
-  // 10. Calculate rental days and price using aggregation
-  const priceDetails = await Rental.aggregate([
+  // CHANGED: Aggregate the existing item document so the pipeline has a source document.
+  const priceDetails = await Item.aggregate([
     {
-      $documents: [
-        {
-          startDate: start,
-          endDate: end,
-          pricePerDay: item.pricePerDay,
-        },
-      ],
+      $match: {
+        _id: item._id,
+      },
     },
     {
       $project: {
         totalDays: {
           $ceil: {
-            $divide: [{ $subtract: ['$endDate', '$startDate'] }, 86400000],
+            $divide: [
+              {
+                $subtract: [{ $literal: end }, { $literal: start }],
+              },
+              86400000,
+            ],
           },
         },
         pricePerDay: 1,
@@ -137,8 +138,16 @@ const createRental = async (rentalData, renterId) => {
       },
     },
   ]);
+  // CHANGED: Return an explicit calculation error instead of dereferencing a missing result.
+  if (!priceDetails.length || !priceDetails[0]) {
+    return {
+      success: false,
+      statusCode: 500,
+      message: 'Unable to calculate rental price for this item',
+    };
+  }
 
-  const { totalDays, totalAmount } = priceDetails[0];
+  const { totalDays, pricePerDay, totalAmount } = priceDetails[0];
 
   // 11. Create rental request
   const rental = await Rental.create({
@@ -148,7 +157,7 @@ const createRental = async (rentalData, renterId) => {
     startDate: start,
     endDate: end,
     totalDays: totalDays,
-    pricePerDay: item.pricePerDay,
+    pricePerDay: pricePerDay,
     totalAmount: totalAmount,
     securityDeposit: item.securityDeposit,
     status: 'pending',
