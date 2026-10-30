@@ -85,6 +85,6 @@ const userSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-userSchema.index({ accountStatus: 1, isDeleted: 1 });
+userSchema.index({ accountStatus: 1, isDeleted: 1 }); //indexing
 
 module.exports = mongoose.model('User', userSchema);
