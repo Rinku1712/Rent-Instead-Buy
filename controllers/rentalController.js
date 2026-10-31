@@ -27,6 +27,60 @@ const createRental = async (req, res) => {
   }
 };
 
+// Changes made here
+const getOwnerRentalRequests = async (req, res) => {
+  try {
+    const result = await rentalService.getOwnerRentalRequests(req.user.id);
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch rental requests',
+    });
+  }
+};
+
+// Changes made here
+const approveRentalRequest = async (req, res) => {
+  try {
+    const result = await rentalService.approveRentalRequest(req.params.rentalId, req.user.id);
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data || null,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to approve rental request',
+    });
+  }
+};
+
+// Changes made here
+const rejectRentalRequest = async (req, res) => {
+  try {
+    const result = await rentalService.rejectRentalRequest(req.params.rentalId, req.user.id);
+    return res.status(result.statusCode).json({
+      success: result.success,
+      message: result.message,
+      data: result.data || null,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to reject rental request',
+    });
+  }
+};
+
 module.exports = {
   createRental,
+  getOwnerRentalRequests,
+  approveRentalRequest,
+  rejectRentalRequest,
 };

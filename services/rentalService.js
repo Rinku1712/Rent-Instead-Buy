@@ -40,6 +40,7 @@ const createRental = async (rentalData, renterId) => {
   }
 
   // 4. Check item availability
+
   if (item.availabilityStatus !== 'available') {
     return {
       success: false,
@@ -49,6 +50,7 @@ const createRental = async (rentalData, renterId) => {
   }
 
   // 5. Check item owner
+
   if (String(item.ownerId) === String(renterId)) {
     return {
       success: false,
@@ -62,6 +64,7 @@ const createRental = async (rentalData, renterId) => {
   const end = new Date(endDate);
 
   // 7. Check valid dates
+
   if (isNaN(start.getTime()) || isNaN(end.getTime())) {
     return {
       success: false,
@@ -96,6 +99,8 @@ const createRental = async (rentalData, renterId) => {
     status: 'approved',
     startDate: { $lt: end },
     endDate: { $gt: start },
+    // Changes made here
+    isDeleted: { $ne: true },
   });
 
   if (existingRental) {
@@ -172,6 +177,146 @@ const createRental = async (rentalData, renterId) => {
   };
 };
 
+// Changes made here
+const getOwnerRentalRequests = async (ownerId) => {
+  const rentals = await Rental.find({
+    ownerId,
+    isDeleted: { $ne: true },
+  })
+    .populate({
+      path: 'itemId',
+      match: { isDeleted: { $ne: true } },
+      select: 'name description brand images condition pricePerDay location',
+    })
+    .populate('renterId', 'name email phone profileImage')
+    .sort({ createdAt: -1 });
+
+  return {
+    success: true,
+    statusCode: 200,
+    message: 'Rental requests fetched successfully',
+    data: rentals.filter((rental) => rental.itemId),
+  };
+};
+
+// Changes made here
+const findPendingRentalForOwner = async (rentalId, ownerId) => {
+  if (!mongoose.Types.ObjectId.isValid(rentalId)) {
+    return {
+      success: false,
+      statusCode: 400,
+      message: 'Invalid rental ID',
+    };
+  }
+
+  const rental = await Rental.findOne({
+    _id: rentalId,
+    isDeleted: { $ne: true },
+  });
+
+  if (!rental) {
+    return {
+      success: false,
+      statusCode: 404,
+      message: 'Rental request not found',
+    };
+  }
+
+  const item = await Item.findOne({
+    _id: rental.itemId,
+    isDeleted: { $ne: true },
+  });
+
+  if (!item) {
+    return {
+      success: false,
+      statusCode: 404,
+      message: 'Item not found',
+    };
+  }
+
+  if (String(item.ownerId) !== String(ownerId)) {
+    return {
+      success: false,
+      statusCode: 403,
+      message: 'You are not the owner of this item',
+    };
+  }
+
+  if (rental.status !== 'pending') {
+    return {
+      success: false,
+      statusCode: 400,
+      message: 'Only pending rental requests can be updated',
+    };
+  }
+
+  return {
+    success: true,
+    statusCode: 200,
+    message: 'Rental request found',
+    data: rental,
+  };
+};
+
+// Changes made here
+const approveRentalRequest = async (rentalId, ownerId) => {
+  const result = await findPendingRentalForOwner(rentalId, ownerId);
+  if (!result.success) {
+    return result;
+  }
+
+  const rental = result.data;
+  const overlappingRental = await Rental.findOne({
+    _id: { $ne: rental._id },
+    itemId: rental.itemId,
+    status: 'approved',
+    startDate: { $lt: rental.endDate },
+    endDate: { $gt: rental.startDate },
+    isDeleted: { $ne: true },
+  });
+
+  if (overlappingRental) {
+    return {
+      success: false,
+      statusCode: 409,
+      message: 'Another approved rental overlaps with these dates',
+    };
+  }
+
+  rental.status = 'approved';
+  await rental.save();
+
+  return {
+    success: true,
+    statusCode: 200,
+    message: 'Rental request approved successfully',
+    data: rental,
+  };
+};
+
+// Changes made here
+const rejectRentalRequest = async (rentalId, ownerId) => {
+  const result = await findPendingRentalForOwner(rentalId, ownerId);
+  if (!result.success) {
+    return result;
+  }
+
+  const rental = result.data;
+  rental.status = 'rejected';
+  await rental.save();
+
+  return {
+    success: true,
+    statusCode: 200,
+    message: 'Rental request rejected successfully',
+    data: rental,
+  };
+};
+
 module.exports = {
   createRental,
+  getOwnerRentalRequests,
+  approveRentalRequest,
+  rejectRentalRequest,
 };

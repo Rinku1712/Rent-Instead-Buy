@@ -13,6 +13,7 @@ const createCategory = async (categoryData) => {
   const { name, description, image, parentCategory } = categoryData;
 
   // Automatically generate a slug from the category name.
+
   const slug = name
     .trim()
     .toLowerCase()
@@ -34,6 +35,7 @@ const createCategory = async (categoryData) => {
   }
 
   // Save the category in MongoDB.
+
   const category = await Category.create({
     name: name.trim(),
     slug,

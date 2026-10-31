@@ -98,6 +98,18 @@ const rentalSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    // Changes made here
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+
+    // Changes made here
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
